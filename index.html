@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#2d6cff" />
+    <meta name="description" content="Simple ToDo - AI-powered NoticeBoard task organizer." />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="./assets/icon-192.svg" />
+    <link rel="apple-touch-icon" href="./assets/icon-192.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>Simple ToDo</title>
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+      <header class="topbar">
+        <div>
+          <h1 class="app-title">Simple ToDo</h1>
+          <p class="app-subtitle">AI-powered NoticeBoard</p>
+        </div>
+        <button id="quickThemeToggle" class="icon-btn icon-only" type="button" aria-label="Toggle theme">
+          <span id="themeToggleIcon" aria-hidden="true">◐</span>
+        </button>
+      </header>
+
+      <main class="view-stack" id="viewStack">
+        <section id="view-todo" class="view is-active" data-view="todo" aria-labelledby="todoHeading">
+          <h2 id="todoHeading" class="visually-hidden">Todo list</h2>
+
+          <article class="clock-card" aria-live="polite">
+            <p class="clock-date" id="clockDate">Loading date...</p>
+            <p class="clock-time" id="clockTime">--:--:--</p>
+          </article>
+
+          <div class="filter-tabs" role="tablist" aria-label="Task filters">
+            <button class="filter-chip is-active" data-filter="all" role="tab" aria-selected="true" type="button">
+              All
+            </button>
+            <button class="filter-chip" data-filter="upcoming" role="tab" aria-selected="false" type="button">
+              Upcoming
+            </button>
+            <button class="filter-chip" data-filter="done" role="tab" aria-selected="false" type="button">
+              Done
+            </button>
+          </div>
+
+          <ul id="taskList" class="task-list" aria-live="polite"></ul>
+
+          <div id="emptyState" class="empty-state" hidden>
+            <div class="empty-illustration" aria-hidden="true"></div>
+            <p class="empty-title">No tasks yet</p>
+            <p class="empty-text">Paste a notice in Add tab and let AI turn it into a clean card.</p>
+          </div>
+        </section>
+
+        <section id="view-add" class="view" data-view="add" aria-labelledby="addHeading">
+          <h2 id="addHeading" class="view-heading">Add notice</h2>
+
+          <label for="noticeInput" class="input-label">Paste notice text</label>
+          <textarea
+            id="noticeInput"
+            class="notice-input"
+            placeholder="Date: 5/28(Thursday), 16:00~17:30&#10;Location: Mechanical Engineering Building (N7), 2nd floor, Haedong Lecture Hall (Rm.2602)&#10;Other: After the event, ME BBQ party..."
+            rows="7"
+          ></textarea>
+
+          <button id="parseNoticeBtn" class="btn btn-primary" type="button">Parse with Groq</button>
+
+          <section id="previewPanel" class="preview-panel" hidden aria-labelledby="previewHeading">
+            <h3 id="previewHeading" class="preview-title">AI extracted - editable</h3>
+
+            <div class="grid-two">
+              <label class="field">
+                <span>Title</span>
+                <input id="previewTitle" type="text" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>Date</span>
+                <input id="previewDate" type="text" placeholder="YYYY-MM-DD or MM/DD" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>Start time</span>
+                <input id="previewStart" type="text" placeholder="16:00" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>End time</span>
+                <input id="previewEnd" type="text" placeholder="17:30" autocomplete="off" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Location</span>
+              <input id="previewLocation" type="text" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Note</span>
+              <textarea id="previewNote" rows="3"></textarea>
+            </label>
+          </section>
+
+          <button id="addTaskBtn" class="btn btn-primary" type="button" disabled>Add to list</button>
+        </section>
+
+        <section id="view-settings" class="view" data-view="settings" aria-labelledby="settingsHeading">
+          <h2 id="settingsHeading" class="view-heading">Settings</h2>
+
+          <article class="settings-card">
+            <h3>Groq API key</h3>
+            <label class="field">
+              <span>Stored only on this device</span>
+              <input id="apiKeyInput" type="password" placeholder="gsk_..." autocomplete="off" />
+            </label>
+            <div class="inline-actions">
+              <button id="saveApiKeyBtn" class="btn btn-secondary" type="button">Save key</button>
+              <button id="clearApiKeyBtn" class="btn btn-ghost" type="button">Clear key</button>
+            </div>
+          </article>
+
+          <article class="settings-card">
+            <h3>Theme</h3>
+            <div class="theme-pills" role="radiogroup" aria-label="Theme mode">
+              <button class="theme-pill" data-theme="light" role="radio" type="button">Light</button>
+              <button class="theme-pill" data-theme="dark" role="radio" type="button">Dark</button>
+              <button class="theme-pill" data-theme="system" role="radio" type="button">System</button>
+            </div>
+          </article>
+
+          <article class="settings-card">
+            <h3>Data</h3>
+            <div class="inline-actions wrap">
+              <button id="exportBtn" class="btn btn-secondary" type="button">Export JSON</button>
+              <label class="btn btn-secondary file-btn">
+                Import JSON
+                <input id="importFileInput" type="file" accept="application/json" />
+              </label>
+              <button id="clearTasksBtn" class="btn btn-danger" type="button">Clear all tasks</button>
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Primary">
+        <button class="nav-btn is-active" type="button" data-target="todo" aria-label="Todo list">List</button>
+        <button class="nav-btn" type="button" data-target="add" aria-label="Add notice">Add</button>
+        <button class="nav-btn" type="button" data-target="settings" aria-label="Settings">Settings</button>
+      </nav>
+    </div>
+
+    <section id="editModal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="editModalTitle">
+      <div class="modal-backdrop" data-close-modal="true"></div>
+      <div class="modal-card">
+        <h3 id="editModalTitle">Edit task</h3>
+        <div class="grid-two">
+          <label class="field">
+            <span>Title</span>
+            <input id="editTitle" type="text" />
+          </label>
+          <label class="field">
+            <span>Date</span>
+            <input id="editDate" type="text" />
+          </label>
+          <label class="field">
+            <span>Start</span>
+            <input id="editStart" type="text" />
+          </label>
+          <label class="field">
+            <span>End</span>
+            <input id="editEnd" type="text" />
+          </label>
+        </div>
+        <label class="field">
+          <span>Location</span>
+          <input id="editLocation" type="text" />
+        </label>
+        <label class="field">
+          <span>Note</span>
+          <textarea id="editNote" rows="3"></textarea>
+        </label>
+        <div class="inline-actions">
+          <button id="cancelEditBtn" class="btn btn-ghost" type="button">Cancel</button>
+          <button id="saveEditBtn" class="btn btn-primary" type="button">Save changes</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="toastRoot" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

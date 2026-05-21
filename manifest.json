@@ -1,0 +1,25 @@
+{
+  "name": "Simple ToDo",
+  "short_name": "Simple ToDo",
+  "description": "AI-powered NoticeBoard task organizer that parses raw notices into clean todo cards.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f6ff",
+  "theme_color": "#2d6cff",
+  "icons": [
+    {
+      "src": "./assets/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

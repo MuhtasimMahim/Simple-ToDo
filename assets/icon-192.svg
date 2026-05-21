@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="Simple ToDo icon">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2d6cff" />
+      <stop offset="100%" stop-color="#1f57dd" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="44" fill="url(#g)" />
+  <rect x="46" y="40" width="100" height="116" rx="16" fill="#ffffff" opacity="0.96" />
+  <circle cx="65" cy="76" r="6" fill="#2d6cff" />
+  <rect x="78" y="71" width="50" height="10" rx="5" fill="#2d6cff" opacity="0.88" />
+  <circle cx="65" cy="103" r="6" fill="#2d6cff" />
+  <rect x="78" y="98" width="44" height="10" rx="5" fill="#2d6cff" opacity="0.78" />
+  <circle cx="65" cy="130" r="6" fill="#2d6cff" />
+  <rect x="78" y="125" width="56" height="10" rx="5" fill="#2d6cff" opacity="0.66" />
+</svg>
