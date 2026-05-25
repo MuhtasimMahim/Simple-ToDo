@@ -344,16 +344,26 @@
   }
 
   function sortByUpcomingDate(a, b) {
-    const aTime = taskToTimestamp(a);
-    const bTime = taskToTimestamp(b);
+    const aKey = getTaskSortKey(a);
+    const bKey = getTaskSortKey(b);
     if (a.done !== b.done) return a.done ? 1 : -1;
-    if (aTime !== bTime) return aTime - bTime;
+    if (aKey.hasSchedule !== bKey.hasSchedule) return aKey.hasSchedule ? 1 : -1;
+    if (aKey.timestamp !== bKey.timestamp) return aKey.timestamp - bKey.timestamp;
     return (a.createdAt || 0) - (b.createdAt || 0);
   }
 
-  function taskToTimestamp(task) {
+  function getTaskSortKey(task) {
     const dateObj = parseFlexibleDate(task.date, task.startTime);
-    return dateObj ? dateObj.getTime() : Number.MAX_SAFE_INTEGER;
+    if (!dateObj) {
+      return {
+        hasSchedule: false,
+        timestamp: 0,
+      };
+    }
+    return {
+      hasSchedule: true,
+      timestamp: dateObj.getTime(),
+    };
   }
 
   function parseFlexibleDate(rawDate, rawTime) {
@@ -375,7 +385,53 @@
       if (!Number.isNaN(parsed.getTime())) return parsed;
     }
 
+    const weekdayDate = parseNextWeekdayDate(cleanedDate, timePart);
+    if (weekdayDate) return weekdayDate;
+
     return null;
+  }
+
+  function parseNextWeekdayDate(rawText, timePart) {
+    const text = String(rawText || "").toLowerCase();
+    if (!text) return null;
+
+    const weekdayMap = {
+      sunday: 0,
+      sun: 0,
+      monday: 1,
+      mon: 1,
+      tuesday: 2,
+      tue: 2,
+      tues: 2,
+      wednesday: 3,
+      wed: 3,
+      thursday: 4,
+      thu: 4,
+      thur: 4,
+      thurs: 4,
+      friday: 5,
+      fri: 5,
+      saturday: 6,
+      sat: 6,
+    };
+
+    const weekdayKey = Object.keys(weekdayMap).find((name) => new RegExp(`\\b${name}\\b`, "i").test(text));
+    if (!weekdayKey) return null;
+
+    const targetDay = weekdayMap[weekdayKey];
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const currentDay = base.getDay();
+
+    let offset = (targetDay - currentDay + 7) % 7;
+    // Treat weekday-only entries as the next occurrence, not "today".
+    if (offset === 0) offset = 7;
+
+    base.setDate(base.getDate() + offset);
+
+    const [hourStr, minuteStr] = String(timePart || "00:00").split(":");
+    base.setHours(Number(hourStr) || 0, Number(minuteStr) || 0, 0, 0);
+    return base;
   }
 
   function normalizeYear(year) {
