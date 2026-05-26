@@ -314,7 +314,7 @@
 
   function buildMetaLine(task) {
     const parts = [];
-    const dateText = formatDateForUI(task.date);
+    const dateText = formatDateForUI(task.date, task.title, task.note);
     const timeText = formatTimeRange(task.startTime, task.endTime);
     if (dateText) parts.push(dateText);
     if (timeText) parts.push(timeText);
@@ -323,9 +323,9 @@
     return parts.join(" - ");
   }
 
-  function formatDateForUI(rawDate) {
-    if (!rawDate) return "";
-    const parsed = parseFlexibleDate(rawDate);
+  function formatDateForUI(rawDate, fallbackTitle, fallbackNote) {
+    if (!rawDate && !fallbackTitle && !fallbackNote) return "";
+    const parsed = parseFlexibleDate(rawDate, "", fallbackTitle, fallbackNote);
     if (!parsed) return rawDate;
     return new Intl.DateTimeFormat(undefined, {
       month: "short",
@@ -353,7 +353,7 @@
   }
 
   function getTaskSortKey(task) {
-    const schedule = resolveTaskSchedule(task.date, task.startTime);
+    const schedule = resolveTaskSchedule(task.date, task.startTime, task.title, task.note);
     if (!schedule.hasSchedule || !schedule.dateObj) {
       return {
         // Keep unscheduled items at the top, as requested.
@@ -367,20 +367,25 @@
     };
   }
 
-  function parseFlexibleDate(rawDate, rawTime) {
-    const schedule = resolveTaskSchedule(rawDate, rawTime);
+  function parseFlexibleDate(rawDate, rawTime, fallbackTitle, fallbackNote) {
+    const schedule = resolveTaskSchedule(rawDate, rawTime, fallbackTitle, fallbackNote);
     return schedule.dateObj;
   }
 
-  function resolveTaskSchedule(rawDate, rawTime) {
+  function resolveTaskSchedule(rawDate, rawTime, fallbackTitle, fallbackNote) {
     const dateText = String(rawDate || "").trim();
-    if (!dateText) {
-      return { hasSchedule: false, dateObj: null };
-    }
 
     const normalizedTime = normalizeTime(rawTime || "");
     const timePart = normalizedTime || "00:00";
-    const weekdayDate = parseNextWeekdayDate(dateText, timePart);
+    const weekdaySource = dateText || `${fallbackTitle || ""} ${fallbackNote || ""}`.trim();
+    const weekdayDate = parseNextWeekdayDate(weekdaySource, timePart);
+
+    if (!dateText) {
+      if (weekdayDate) {
+        return { hasSchedule: true, dateObj: weekdayDate };
+      }
+      return { hasSchedule: false, dateObj: null };
+    }
 
     // Date with weekday in parentheses is common in notices (ex: 5/28(Thursday)).
     const cleanedDate = dateText.replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim();
@@ -438,7 +443,7 @@
 
       const year = slashMatch[3]
         ? normalizeYear(Number(slashMatch[3]))
-        : resolveUpcomingYearForMonthDay(month, day);
+        : new Date().getFullYear();
       const parsed = new Date(year, month - 1, day);
       if (isValidCalendarDate(parsed, year, month, day)) return parsed;
     }
@@ -454,24 +459,6 @@
       dateObj.getMonth() === month - 1 &&
       dateObj.getDate() === day
     );
-  }
-
-  function resolveUpcomingYearForMonthDay(month, day) {
-    const now = new Date();
-    const thisYear = now.getFullYear();
-    const candidateThisYear = new Date(thisYear, month - 1, day);
-    if (!isValidCalendarDate(candidateThisYear, thisYear, month, day)) {
-      return thisYear;
-    }
-
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const candidateDay = new Date(candidateThisYear.getFullYear(), candidateThisYear.getMonth(), candidateThisYear.getDate());
-
-    // If this year's date already passed, treat it as next year's occurrence.
-    if (candidateDay < today) {
-      return thisYear + 1;
-    }
-    return thisYear;
   }
 
   function timePartToParts(timePart) {
