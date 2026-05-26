@@ -1,6 +1,8 @@
-# Simple ToDo
+# Simple ToDo 
 
-Simple ToDo is a client-side, AI-powered NoticeBoard PWA.
+Project Link: https://simpletodo.muhtasimmahim.me/
+
+It is a simple to do app coded with HTML, CSS and Javascript. Simple ToDo is a client-side, AI-powered NoticeBoard PWA.
 Users paste raw university notices, parse them with Groq, review extracted fields, and save clean todo cards locally.
 
 ## Stack
@@ -49,19 +51,6 @@ No backend, no framework, no build step, no npm required.
 1. Create a Groq API key from the Groq console.
 2. Open the app, go to **Settings**, paste key, click **Save key**.
 3. Key stays only in your browser localStorage for this device/profile.
-
-## Local Run
-
-Because service workers require HTTP(S), use a local static server:
-
-### Option A: VS Code Live Server
-- Open project folder
-- Start Live Server
-
-### Option B: Python simple server
-```bash
-python -m http.server 8080
-```
 
 ## Notes
 

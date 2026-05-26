@@ -822,7 +822,7 @@
 
   async function parseNoticeWithAI(text) {
     const systemPrompt = [
-      "You extract structured event data from raw university notices.",
+      "You extract structured event data as it will be used in the to-do list.",
       "Return one JSON object only.",
       "No markdown, no extra words, no code fences.",
       "Output keys exactly:",
