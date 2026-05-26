@@ -50,6 +50,8 @@
     previewDate: document.getElementById("previewDate"),
     previewStart: document.getElementById("previewStart"),
     previewEnd: document.getElementById("previewEnd"),
+    previewYear: document.getElementById("previewYear"),
+    previewDay: document.getElementById("previewDay"),
     previewLocation: document.getElementById("previewLocation"),
     previewNote: document.getElementById("previewNote"),
 
@@ -121,6 +123,8 @@
         handleParseNoticeClick();
       }
     });
+    dom.previewDate.addEventListener("input", syncPreviewScheduleMeta);
+    dom.previewStart.addEventListener("input", syncPreviewScheduleMeta);
 
     dom.saveApiKeyBtn.addEventListener("click", () => {
       const nextKey = dom.apiKeyInput.value.trim();
@@ -314,7 +318,7 @@
 
   function buildMetaLine(task) {
     const parts = [];
-    const dateText = formatDateForUI(task.date, task.title, task.note);
+    const dateText = formatDateForUI(task.date);
     const timeText = formatTimeRange(task.startTime, task.endTime);
     if (dateText) parts.push(dateText);
     if (timeText) parts.push(timeText);
@@ -323,9 +327,9 @@
     return parts.join(" - ");
   }
 
-  function formatDateForUI(rawDate, fallbackTitle, fallbackNote) {
-    if (!rawDate && !fallbackTitle && !fallbackNote) return "";
-    const parsed = parseFlexibleDate(rawDate, "", fallbackTitle, fallbackNote);
+  function formatDateForUI(rawDate) {
+    if (!rawDate) return "";
+    const parsed = parseFlexibleDate(rawDate);
     if (!parsed) return rawDate;
     return new Intl.DateTimeFormat(undefined, {
       month: "short",
@@ -353,7 +357,7 @@
   }
 
   function getTaskSortKey(task) {
-    const schedule = resolveTaskSchedule(task.date, task.startTime, task.title, task.note);
+    const schedule = resolveTaskSchedule(task.date, task.startTime);
     if (!schedule.hasSchedule || !schedule.dateObj) {
       return {
         // Keep unscheduled items at the top, as requested.
@@ -367,18 +371,21 @@
     };
   }
 
-  function parseFlexibleDate(rawDate, rawTime, fallbackTitle, fallbackNote) {
-    const schedule = resolveTaskSchedule(rawDate, rawTime, fallbackTitle, fallbackNote);
+  function parseFlexibleDate(rawDate, rawTime) {
+    const schedule = resolveTaskSchedule(rawDate, rawTime);
     return schedule.dateObj;
   }
 
-  function resolveTaskSchedule(rawDate, rawTime, fallbackTitle, fallbackNote) {
+  // Schedule resolution pipeline (strict, low-inference):
+  // 1) Parse explicit dates from the date field.
+  // 2) If explicit date is absent, parse weekday-only from the date field.
+  // 3) Otherwise treat as unscheduled.
+  function resolveTaskSchedule(rawDate, rawTime) {
     const dateText = String(rawDate || "").trim();
 
     const normalizedTime = normalizeTime(rawTime || "");
     const timePart = normalizedTime || "00:00";
-    const weekdaySource = dateText || `${fallbackTitle || ""} ${fallbackNote || ""}`.trim();
-    const weekdayDate = parseNextWeekdayDate(weekdaySource, timePart);
+    const weekdayDate = parseNextWeekdayDate(dateText, timePart);
 
     if (!dateText) {
       if (weekdayDate) {
@@ -401,19 +408,13 @@
       return { hasSchedule: true, dateObj: weekdayDate };
     }
 
-    // Fallback for parsable natural date strings (e.g. "May 28").
-    const fallbackParsed = new Date(cleanedDate);
-    if (!Number.isNaN(fallbackParsed.getTime())) {
-      fallbackParsed.setHours(...timePartToParts(timePart), 0, 0);
-      return { hasSchedule: true, dateObj: fallbackParsed };
-    }
-
     return { hasSchedule: false, dateObj: null };
   }
 
   function parseExplicitDate(dateText) {
     const text = String(dateText || "").trim();
     if (!text) return null;
+    const currentYear = new Date().getFullYear();
 
     // YYYY-MM-DD or YYYY/MM/DD
     const isoMatch = text.match(/\b(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
@@ -423,6 +424,60 @@
       const day = Number(isoMatch[3]);
       const parsed = new Date(year, month - 1, day);
       if (isValidCalendarDate(parsed, year, month, day)) return parsed;
+    }
+
+    // Month-name forms:
+    // - Jun 7, 2026
+    // - June 7
+    // - 7 Jun 2026
+    // - 7 June
+    const monthByName = {
+      jan: 1,
+      january: 1,
+      feb: 2,
+      february: 2,
+      mar: 3,
+      march: 3,
+      apr: 4,
+      april: 4,
+      may: 5,
+      jun: 6,
+      june: 6,
+      jul: 7,
+      july: 7,
+      aug: 8,
+      august: 8,
+      sep: 9,
+      sept: 9,
+      september: 9,
+      oct: 10,
+      october: 10,
+      nov: 11,
+      november: 11,
+      dec: 12,
+      december: 12,
+    };
+
+    const monthFirst = text.match(/\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:,?\s*(\d{2,4}))?\b/);
+    if (monthFirst) {
+      const month = monthByName[monthFirst[1].toLowerCase()];
+      if (month) {
+        const day = Number(monthFirst[2]);
+        const year = monthFirst[3] ? normalizeYear(Number(monthFirst[3])) : currentYear;
+        const parsed = new Date(year, month - 1, day);
+        if (isValidCalendarDate(parsed, year, month, day)) return parsed;
+      }
+    }
+
+    const dayFirst = text.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\.?(?:,?\s*(\d{2,4}))?\b/);
+    if (dayFirst) {
+      const month = monthByName[dayFirst[2].toLowerCase()];
+      if (month) {
+        const day = Number(dayFirst[1]);
+        const year = dayFirst[3] ? normalizeYear(Number(dayFirst[3])) : currentYear;
+        const parsed = new Date(year, month - 1, day);
+        if (isValidCalendarDate(parsed, year, month, day)) return parsed;
+      }
     }
 
     // MM/DD(/YYYY) or MM-DD(-YYYY)
@@ -441,9 +496,7 @@
         day = first;
       }
 
-      const year = slashMatch[3]
-        ? normalizeYear(Number(slashMatch[3]))
-        : new Date().getFullYear();
+      const year = slashMatch[3] ? normalizeYear(Number(slashMatch[3])) : currentYear;
       const parsed = new Date(year, month - 1, day);
       if (isValidCalendarDate(parsed, year, month, day)) return parsed;
     }
@@ -464,6 +517,13 @@
   function timePartToParts(timePart) {
     const [hourStr, minuteStr] = String(timePart || "00:00").split(":");
     return [Number(hourStr) || 0, Number(minuteStr) || 0];
+  }
+
+  function formatIsoDate(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = pad2(dateObj.getMonth() + 1);
+    const day = pad2(dateObj.getDate());
+    return `${year}-${month}-${day}`;
   }
 
   function parseNextWeekdayDate(rawText, timePart) {
@@ -638,12 +698,30 @@
     dom.previewEnd.value = parsed.endTime || "";
     dom.previewLocation.value = parsed.location || "";
     dom.previewNote.value = parsed.note || "";
+    syncPreviewScheduleMeta();
+  }
+
+  function syncPreviewScheduleMeta() {
+    const schedule = resolveTaskSchedule(dom.previewDate.value.trim(), dom.previewStart.value.trim());
+
+    if (!schedule.hasSchedule || !schedule.dateObj) {
+      dom.previewYear.value = "";
+      dom.previewDay.value = "";
+      return;
+    }
+
+    dom.previewYear.value = String(schedule.dateObj.getFullYear());
+    dom.previewDay.value = new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(schedule.dateObj);
   }
 
   function readPreviewDraft() {
+    const schedule = resolveTaskSchedule(dom.previewDate.value.trim(), dom.previewStart.value.trim());
+    const rawDate = dom.previewDate.value.trim();
+    const normalizedDate = schedule.hasSchedule && schedule.dateObj ? formatIsoDate(schedule.dateObj) : rawDate;
+
     return {
       title: dom.previewTitle.value.trim(),
-      date: dom.previewDate.value.trim(),
+      date: normalizedDate,
       startTime: normalizeTime(dom.previewStart.value.trim()),
       endTime: normalizeTime(dom.previewEnd.value.trim()),
       location: dom.previewLocation.value.trim(),
@@ -681,6 +759,8 @@
     dom.previewDate.value = "";
     dom.previewStart.value = "";
     dom.previewEnd.value = "";
+    dom.previewYear.value = "";
+    dom.previewDay.value = "";
     dom.previewLocation.value = "";
     dom.previewNote.value = "";
   }
@@ -823,6 +903,12 @@
     if (!normalized.title) {
       normalized.title = generateFallbackTitle(sourceText);
     }
+
+    const schedule = resolveTaskSchedule(normalized.date, normalized.startTime);
+    if (schedule.hasSchedule && schedule.dateObj) {
+      normalized.date = formatIsoDate(schedule.dateObj);
+    }
+
     return normalized;
   }
 

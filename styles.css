@@ -323,6 +323,11 @@ textarea {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
+.field input[readonly] {
+  background: color-mix(in oklab, var(--bg-elev) 82%, var(--accent-soft));
+  color: var(--text-soft);
+}
+
 .notice-input {
   resize: vertical;
 }
