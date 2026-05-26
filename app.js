@@ -347,48 +347,105 @@
     const aKey = getTaskSortKey(a);
     const bKey = getTaskSortKey(b);
     if (a.done !== b.done) return a.done ? 1 : -1;
-    if (aKey.hasSchedule !== bKey.hasSchedule) return aKey.hasSchedule ? 1 : -1;
+    if (aKey.rank !== bKey.rank) return aKey.rank - bKey.rank;
     if (aKey.timestamp !== bKey.timestamp) return aKey.timestamp - bKey.timestamp;
     return (a.createdAt || 0) - (b.createdAt || 0);
   }
 
   function getTaskSortKey(task) {
-    const dateObj = parseFlexibleDate(task.date, task.startTime);
-    if (!dateObj) {
+    const schedule = resolveTaskSchedule(task.date, task.startTime);
+    if (!schedule.hasSchedule || !schedule.dateObj) {
       return {
-        hasSchedule: false,
+        // Keep unscheduled items at the top, as requested.
+        rank: 0,
         timestamp: 0,
       };
     }
     return {
-      hasSchedule: true,
-      timestamp: dateObj.getTime(),
+      rank: 1,
+      timestamp: schedule.dateObj.getTime(),
     };
   }
 
   function parseFlexibleDate(rawDate, rawTime) {
-    if (!rawDate || typeof rawDate !== "string") return null;
-    const cleanedDate = rawDate.replace(/\(.*?\)/g, "").trim();
-    const normalizedTime = normalizeTime(rawTime || "");
-    const timePart = normalizedTime || "00:00";
+    const schedule = resolveTaskSchedule(rawDate, rawTime);
+    return schedule.dateObj;
+  }
 
-    const tryIso = new Date(`${cleanedDate}T${timePart}`);
-    if (!Number.isNaN(tryIso.getTime())) return tryIso;
-
-    const slash = cleanedDate.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
-    if (slash) {
-      const month = Number(slash[1]);
-      const day = Number(slash[2]);
-      const year = slash[3] ? normalizeYear(Number(slash[3])) : new Date().getFullYear();
-      const rebuilt = `${year}-${pad2(month)}-${pad2(day)}T${timePart}`;
-      const parsed = new Date(rebuilt);
-      if (!Number.isNaN(parsed.getTime())) return parsed;
+  function resolveTaskSchedule(rawDate, rawTime) {
+    const dateText = String(rawDate || "").trim();
+    if (!dateText) {
+      return { hasSchedule: false, dateObj: null };
     }
 
-    const weekdayDate = parseNextWeekdayDate(cleanedDate, timePart);
-    if (weekdayDate) return weekdayDate;
+    const normalizedTime = normalizeTime(rawTime || "");
+    const timePart = normalizedTime || "00:00";
+    const weekdayDate = parseNextWeekdayDate(dateText, timePart);
+
+    // Date with weekday in parentheses is common in notices (ex: 5/28(Thursday)).
+    const cleanedDate = dateText.replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim();
+    const explicitDate = parseExplicitDate(cleanedDate);
+
+    if (explicitDate) {
+      explicitDate.setHours(...timePartToParts(timePart), 0, 0);
+      return { hasSchedule: true, dateObj: explicitDate };
+    }
+
+    // If no explicit date but weekday exists, treat as next occurrence of that weekday.
+    if (weekdayDate) {
+      return { hasSchedule: true, dateObj: weekdayDate };
+    }
+
+    // Fallback for parsable natural date strings (e.g. "May 28").
+    const fallbackParsed = new Date(cleanedDate);
+    if (!Number.isNaN(fallbackParsed.getTime())) {
+      fallbackParsed.setHours(...timePartToParts(timePart), 0, 0);
+      return { hasSchedule: true, dateObj: fallbackParsed };
+    }
+
+    return { hasSchedule: false, dateObj: null };
+  }
+
+  function parseExplicitDate(dateText) {
+    const text = String(dateText || "").trim();
+    if (!text) return null;
+
+    // YYYY-MM-DD or YYYY/MM/DD
+    const isoMatch = text.match(/\b(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
+    if (isoMatch) {
+      const year = Number(isoMatch[1]);
+      const month = Number(isoMatch[2]);
+      const day = Number(isoMatch[3]);
+      const parsed = new Date(year, month - 1, day);
+      if (isValidCalendarDate(parsed, year, month, day)) return parsed;
+    }
+
+    // MM/DD(/YYYY) or MM-DD(-YYYY)
+    const slashMatch = text.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+    if (slashMatch) {
+      const month = Number(slashMatch[1]);
+      const day = Number(slashMatch[2]);
+      const year = slashMatch[3] ? normalizeYear(Number(slashMatch[3])) : new Date().getFullYear();
+      const parsed = new Date(year, month - 1, day);
+      if (isValidCalendarDate(parsed, year, month, day)) return parsed;
+    }
 
     return null;
+  }
+
+  function isValidCalendarDate(dateObj, year, month, day) {
+    return (
+      dateObj instanceof Date &&
+      !Number.isNaN(dateObj.getTime()) &&
+      dateObj.getFullYear() === year &&
+      dateObj.getMonth() === month - 1 &&
+      dateObj.getDate() === day
+    );
+  }
+
+  function timePartToParts(timePart) {
+    const [hourStr, minuteStr] = String(timePart || "00:00").split(":");
+    return [Number(hourStr) || 0, Number(minuteStr) || 0];
   }
 
   function parseNextWeekdayDate(rawText, timePart) {
@@ -429,8 +486,8 @@
 
     base.setDate(base.getDate() + offset);
 
-    const [hourStr, minuteStr] = String(timePart || "00:00").split(":");
-    base.setHours(Number(hourStr) || 0, Number(minuteStr) || 0, 0, 0);
+    const [hour, minute] = timePartToParts(timePart);
+    base.setHours(hour, minute, 0, 0);
     return base;
   }
 
