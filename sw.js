@@ -1,4 +1,4 @@
-const CACHE_NAME = "simpletodo-cache-v2";
+const CACHE_NAME = "simpletodo-cache-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -41,41 +41,84 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Network-first for same-origin app shell/resources so new deployments update promptly.
-  // Offline still works by falling back to cache.
+  // Production perf mode:
+  // Cache-first for same-origin app files for instant startup,
+  // while revalidating in background to keep cache fresh.
   if (requestUrl.origin === self.location.origin) {
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-          }
-          return networkResponse;
-        })
-        .catch(async () => {
-          const cached = await caches.match(event.request);
-          if (cached) return cached;
-          if (event.request.mode === "navigate") {
-            return caches.match("./index.html");
-          }
-          return new Response("Offline", {
-            status: 503,
-            statusText: "Offline",
-            headers: { "Content-Type": "text/plain" },
-          });
-        })
-    );
+    event.respondWith(cacheFirstWithBackgroundUpdate(event.request));
     return;
   }
 
+  // External assets (e.g., fonts): cache-first for speed + offline support.
   event.respondWith(
-    fetch(event.request).catch(() =>
-      new Response("Offline", {
-        status: 503,
-        statusText: "Offline",
-        headers: { "Content-Type": "text/plain" },
-      })
-    )
+    caches.match(event.request).then((cached) => {
+      if (cached) {
+        event.waitUntil(updateCacheFromNetwork(event.request));
+        return cached;
+      }
+      return fetch(event.request)
+        .then((response) => {
+          if (isCacheableResponse(response)) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          new Response("Offline", {
+            status: 503,
+            statusText: "Offline",
+            headers: { "Content-Type": "text/plain" },
+          })
+        );
+    })
   );
 });
+
+async function cacheFirstWithBackgroundUpdate(request) {
+  const cached = await caches.match(request);
+  if (cached) {
+    // Refresh in background; user still gets instant response.
+    updateCacheFromNetwork(request);
+    return cached;
+  }
+
+  try {
+    const networkResponse = await fetch(request);
+    if (isCacheableResponse(networkResponse)) {
+      const clone = networkResponse.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+    }
+    return networkResponse;
+  } catch {
+    if (request.mode === "navigate") {
+      const shell = await caches.match("./index.html");
+      if (shell) return shell;
+    }
+    return new Response("Offline", {
+      status: 503,
+      statusText: "Offline",
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+}
+
+async function updateCacheFromNetwork(request) {
+  try {
+    const response = await fetch(request);
+    if (isCacheableResponse(response)) {
+      const clone = response.clone();
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, clone);
+    }
+  } catch {
+    // Keep existing cached version when network is unavailable.
+  }
+}
+
+function isCacheableResponse(response) {
+  if (!response) return false;
+  if (response.status === 200) return true;
+  // Opaque responses (status 0), common for cross-origin fonts/CDN.
+  return response.type === "opaque";
+}
