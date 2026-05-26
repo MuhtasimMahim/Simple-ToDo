@@ -423,9 +423,22 @@
     // MM/DD(/YYYY) or MM-DD(-YYYY)
     const slashMatch = text.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
     if (slashMatch) {
-      const month = Number(slashMatch[1]);
-      const day = Number(slashMatch[2]);
-      const year = slashMatch[3] ? normalizeYear(Number(slashMatch[3])) : new Date().getFullYear();
+      const first = Number(slashMatch[1]);
+      const second = Number(slashMatch[2]);
+      let month = first;
+      let day = second;
+
+      // Heuristic:
+      // - Default to MM/DD
+      // - If first token cannot be a month but second can, treat as DD/MM
+      if (first > 12 && second <= 12) {
+        month = second;
+        day = first;
+      }
+
+      const year = slashMatch[3]
+        ? normalizeYear(Number(slashMatch[3]))
+        : resolveUpcomingYearForMonthDay(month, day);
       const parsed = new Date(year, month - 1, day);
       if (isValidCalendarDate(parsed, year, month, day)) return parsed;
     }
@@ -441,6 +454,24 @@
       dateObj.getMonth() === month - 1 &&
       dateObj.getDate() === day
     );
+  }
+
+  function resolveUpcomingYearForMonthDay(month, day) {
+    const now = new Date();
+    const thisYear = now.getFullYear();
+    const candidateThisYear = new Date(thisYear, month - 1, day);
+    if (!isValidCalendarDate(candidateThisYear, thisYear, month, day)) {
+      return thisYear;
+    }
+
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const candidateDay = new Date(candidateThisYear.getFullYear(), candidateThisYear.getMonth(), candidateThisYear.getDate());
+
+    // If this year's date already passed, treat it as next year's occurrence.
+    if (candidateDay < today) {
+      return thisYear + 1;
+    }
+    return thisYear;
   }
 
   function timePartToParts(timePart) {
@@ -730,10 +761,12 @@
       "Output keys exactly:",
       '{"title":"","date":"","startTime":"","endTime":"","location":"","note":""}',
       "Rules:",
-      "- If title is missing, generate a concise title under 5 words.",
-      "- Keep date as given if unsure.",
+      "- Be literal. Copy wording from the notice whenever possible.",
+      "- Do not add adjectives, summaries, or extra context not present in the notice.",
+      "- If title is missing, infer a minimal neutral title under 4 words using only the notice context.",
+      "- Keep date exactly as written if unsure.",
       "- Keep times in HH:MM if possible.",
-      "- Put all leftover details into note.",
+      "- Put only explicitly mentioned leftover details into note.",
       "- Never omit required keys.",
     ].join("\n");
 

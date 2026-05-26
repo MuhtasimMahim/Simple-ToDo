@@ -1,4 +1,4 @@
-const CACHE_NAME = "simpletodo-cache-v1";
+const CACHE_NAME = "simpletodo-cache-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -41,20 +41,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request)
+  // Network-first for same-origin app shell/resources so new deployments update promptly.
+  // Offline still works by falling back to cache.
+  if (requestUrl.origin === self.location.origin) {
+    event.respondWith(
+      fetch(event.request)
         .then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== "basic") {
-            return networkResponse;
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
           }
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
           return networkResponse;
         })
-        .catch(() => {
-          // Fallback to app shell for document navigation while offline.
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
           if (event.request.mode === "navigate") {
             return caches.match("./index.html");
           }
@@ -63,7 +64,18 @@ self.addEventListener("fetch", (event) => {
             statusText: "Offline",
             headers: { "Content-Type": "text/plain" },
           });
-        });
-    })
+        })
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(event.request).catch(() =>
+      new Response("Offline", {
+        status: 503,
+        statusText: "Offline",
+        headers: { "Content-Type": "text/plain" },
+      })
+    )
   );
 });
